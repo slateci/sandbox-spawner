@@ -105,6 +105,16 @@ public:
 		saveData();
 	}
 	
+	void remove(const std::string& globusID){
+		std::lock_guard<std::mutex> lock(mut);
+		auto it=podMap.find(globusID);
+		if(it==podMap.end())
+			return;
+		usedPorts.erase(it->second.servicePort);
+		podMap.erase(it);
+		saveData();
+	}
+	
 	unsigned int getPort(){
 		std::lock_guard<std::mutex> lock(mut);
 		for(unsigned int port=5000; port<10000; port++){
@@ -139,6 +149,7 @@ private:
 		}
 		boost::archive::text_iarchive ar(in);
 		ar >> podMap;
+		std::cout << "Reloaded " << podMap.size() << " account records" << std::endl;
 		for(const auto& account : podMap)
 			usedPorts.insert(account.second.servicePort);
 	}
@@ -380,6 +391,8 @@ crow::response deleteAccount(DataStore& store, const crow::request& req, const s
 	result=runCommand("kubectl",{"delete","secret",account->secretName});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl delete secret failed: "+result.error));
+	
+	store.remove(globusID);
 	
 	return crow::response(200);
 }
