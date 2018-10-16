@@ -195,14 +195,17 @@ spec:
         ports:
         - containerPort: 7681
           name: ttyd
-        volumeMounts:
-        - name: slate-data
-          mountPath: "/home/slate/.slate"
-      volumes:
-      - name: slate-data
-        secret:
-          secretName: {{name}}-slate-data
-          defaultMode: 384 # 0600
+        env:
+          - name: SLATE_API_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: {{name}}-slate-data
+                key: endpoint
+          - name: SLATE_TOKEN
+            valueFrom:
+              secretKeyRef:
+                name: {{name}}-slate-data
+                key: token
 ---
 kind: Service
 apiVersion: v1
