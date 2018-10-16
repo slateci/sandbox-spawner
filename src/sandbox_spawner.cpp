@@ -6,6 +6,7 @@
 #include <random>
 #include <string>
 #include <map>
+#include <set>
 
 #define CROW_ENABLE_SSL
 #include <crow.h>
@@ -48,6 +49,7 @@ struct UserData{
 	std::string deploymentName;
 	std::string podName;
 	std::string serviceName;
+	unsigned int servicePort;
 	std::string secretName;
 	std::string authToken;
 	std::string slateID;
@@ -63,6 +65,7 @@ void UserData::serialize(Archive& ar, const unsigned int file_version){
 	ar & make_nvp("deployment",deploymentName);
 	ar & make_nvp("pod",podName);
 	ar & make_nvp("service",serviceName);
+	ar & make_nvp("port",servicePort);
 	ar & make_nvp("secret",secretName);
 	ar & make_nvp("auth",authToken);
 	ar & make_nvp("slateID",slateID);
@@ -98,13 +101,24 @@ public:
 	void record(const std::string& globusID, const UserData& data){
 		std::lock_guard<std::mutex> lock(mut);
 		podMap[globusID]=data;
+		usedPorts.insert(data.servicePort);
 		saveData();
+	}
+	
+	unsigned int getPort(){
+		std::lock_guard<std::mutex> lock(mut);
+		for(unsigned int port=5000; port<10000; port++){
+			if(!usedPorts.count(port))
+				return port;
+		}
+		throw std::runtime_error("port range exhausted");
 	}
 	
 private:
 	std::mutex mut;
 	std::string persistentPath;
 	std::map<std::string,UserData> podMap;
+	std::set<unsigned int> usedPorts;
 	
 	//\pre mut held
 	void saveData(){
@@ -125,11 +139,14 @@ private:
 		}
 		boost::archive::text_iarchive ar(in);
 		ar >> podMap;
+		for(const auto& account : podMap)
+			usedPorts.insert(account.second.servicePort);
 	}
 };
 
 const static std::string namePattern="{{name}}";
 const static std::string authPattern="{{auth}}";
+const static std::string portPattern="{{external-port}}";
 const static std::string slateTokenPattern="{{slate-token}}";
 const static std::string slateEndpointPattern="{{slate-endpoint}}";
 const static std::string deploymentTemplate=R"(apiVersion: v1
@@ -184,7 +201,7 @@ spec:
   type: "LoadBalancer"
   ports:
   - protocol: TCP
-    port: 7682 # external port
+    port: {{external-port}} # external port
     targetPort: 7681 # internal port where the daemon is listening
 )";
 
@@ -204,6 +221,7 @@ crow::response createAccount(DataStore& store, const crow::request& req, const s
 		account=UserData{};
 		//generate an authentication token
 		account->authToken="slate:"+tokenGenerator.getToken();
+		account->servicePort=store.getPort();
 		//create the acount in SLATE
 		std::cout << "Creating SLATE account" << std::endl;
 		rapidjson::Document request(rapidjson::kObjectType);
@@ -237,6 +255,7 @@ crow::response createAccount(DataStore& store, const crow::request& req, const s
 		std::string deployment=deploymentTemplate;
 		replaceAll(deployment,namePattern,name);
 		replaceAll(deployment,authPattern,account->authToken);
+		replaceAll(deployment,portPattern,std::to_string(account->servicePort));
 		replaceAll(deployment,slateTokenPattern,base64_encode(account->slateToken.c_str(),account->slateToken.size()));
 		replaceAll(deployment,slateEndpointPattern,base64_encode(config.slateEndpoint.c_str(),config.slateEndpoint.size()));
 		
