@@ -343,10 +343,10 @@ crow::response podReady(DataStore& store, const crow::request& req, const std::s
 
 crow::response serviceDetails(DataStore& store, const crow::request& req, const std::string globusID){
 	std::cout << "getting service endpoint for " << globusID << std::endl;
-	auto acount=store.find(globusID);
-	if(!acount)
+	auto account=store.find(globusID);
+	if(!account)
 		return crow::response(404,generateError("User not found"));
-	auto result=runCommand("kubectl",{"get","service",acount->serviceName,"-o=json"});
+	auto result=runCommand("kubectl",{"get","service",account->serviceName,"-o=json"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl get service failed: "+result.error));
 	rapidjson::Document data;
@@ -356,12 +356,24 @@ crow::response serviceDetails(DataStore& store, const crow::request& req, const 
 		return crow::response(500,generateError("Unable to parse JSON from kubectl"));
 	}
 	
-	if(data.IsNull() || !data.HasMember("status") || !data["status"].IsObject()
-	   || !data["status"].HasMember("loadBalancer") || !data["status"]["loadBalancer"].IsObject()
-	   || !data["status"]["loadBalancer"].HasMember("ingress") || !data["status"]["loadBalancer"]["ingress"].IsArray())
+	if(data.IsNull() || !data.HasMember("spec") || !data["spec"].IsObject()
+	   || !data["spec"].HasMember("ports") || !data["spec"]["ports"].IsArray())
 		return crow::response(500,generateError("Unable to parse JSON from kubectl"));
-	std::string externalIP=data["status"]["loadBalancer"]["ingress"][0]["ip"].GetString();
-	std::string port=std::to_string(data["spec"]["ports"][0]["port"].GetInt());
+	std::string port=std::to_string(data["spec"]["ports"][0]["nodePort"].GetInt());
+	
+	result=runCommand("kubectl",{"get","pod",account->podName,"-o=json"});
+	if(result.status!=0)
+		return crow::response(500,generateError("kubectl get pod failed: "+result.error));
+	try{
+		data.Parse(result.output);
+	}catch(std::runtime_error& err){
+		return crow::response(500,generateError("Unable to parse JSON from kubectl"));
+	}
+	
+	if(data.IsNull() || !data.HasMember("status") || !data["status"].IsObject()
+	   || !data["status"].HasMember("hostIP") || !data["status"]["hostIP"].IsString())
+		return crow::response(500,generateError("Unable to parse JSON from kubectl"));
+	std::string externalIP=data["status"]["hostIP"].GetString();
 	
 	rapidjson::Document response(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = response.GetAllocator();
