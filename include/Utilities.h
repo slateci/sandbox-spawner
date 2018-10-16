@@ -7,7 +7,6 @@
 #include "rapidjson/stringbuffer.h"
 
 #include <sstream>
-#include "Entities.h"
 
 ///\return a timestamp rendered as a string with format "YYYY-mmm-DD HH:MM:SS UTC"
 std::string timestamp();
