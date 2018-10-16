@@ -241,13 +241,12 @@ crow::response createAccount(DataStore& store, const crow::request& req, const s
 		replaceAll(deployment,slateEndpointPattern,base64_encode(config.slateEndpoint.c_str(),config.slateEndpoint.size()));
 		
 		std::cout << "Deploying kubernetes objects" << std::endl;
-		std::cout << "Deployment:\n" << deployment << std::endl;
 		{
 			std::ofstream tmpfile(globusID);
 			tmpfile << deployment;
 		}
 		//auto applyResult=runCommandWithInput("kubectl",deployment,{"apply","-f",""});
-		auto applyResult=runCommand("kubectl",{"apply","-f","deploy.yaml"});
+		auto applyResult=runCommand("kubectl",{"apply","-f",globusID});
 		if(applyResult.status!=0){
 			std::cerr << applyResult.error << std::endl;
 			return crow::response(500,generateError("Unable to deploy kubernetes pod"));
