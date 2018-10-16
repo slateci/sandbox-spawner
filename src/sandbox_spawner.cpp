@@ -266,11 +266,11 @@ crow::response createAccount(DataStore& store, const crow::request& req, const s
 		}
 		//auto applyResult=runCommandWithInput("kubectl",deployment,{"apply","-f",""});
 		auto applyResult=runCommand("kubectl",{"apply","-f",globusID});
+		remove(globusID.c_str());
 		if(applyResult.status!=0){
 			std::cerr << applyResult.error << std::endl;
 			return crow::response(500,generateError("Unable to deploy kubernetes pod"));
 		}
-		remove(globusID.c_str());
 		account->deploymentName=name;
 		account->serviceName=name+"-service";
 		account->secretName=name+"-slate-data";
