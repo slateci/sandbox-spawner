@@ -175,7 +175,6 @@ spec:
         app: {{name}}
     spec:
       hostname: sandbox
-      subdomain: slateci.io
       containers:
       - name: {{name}}
         image: slateci/container-ttyd
