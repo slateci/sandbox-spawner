@@ -174,6 +174,8 @@ spec:
       labels:
         app: {{name}}
     spec:
+      hostname: sandbox
+      subdomain: slateci.io
       containers:
       - name: {{name}}
         image: slateci/container-ttyd
@@ -190,6 +192,7 @@ spec:
       - name: slate-data
         secret:
           secretName: {{name}}-slate-data
+          defaultMode: 384 # 0600
 ---
 kind: Service
 apiVersion: v1
@@ -198,7 +201,7 @@ metadata:
 spec:
   selector:
     app: {{name}}
-  type: "LoadBalancer"
+  type: "NodePort"
   ports:
   - protocol: TCP
     port: {{external-port}} # external port
