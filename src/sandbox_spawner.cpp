@@ -232,7 +232,7 @@ spec:
         image: slateci/container-ttyd
         command: ["ttyd"]
         args: ["-c","{{auth}}","bash"]
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 7681
           name: ttyd
