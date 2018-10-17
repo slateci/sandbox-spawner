@@ -213,6 +213,7 @@ kind: Service
 apiVersion: v1
 metadata:
   name: {{name}}-service
+  namespace: tutorial
 spec:
   selector:
     app: {{name}}
