@@ -37,13 +37,52 @@ struct Configuration{
 	std::string sslKey;
 	std::string slateEndpoint;
 	std::string slateAdminToken;
+	std::string dataStorePath;
 	
-	Configuration():
+	std::map<std::string,std::string&> options;
+	
+	Configuration(int argc, char* argv[]):
 	portString("18081"),
 	slateEndpoint("http://sandbox.slateci.io:18080"),
-	slateAdminToken("3acc9bdc-1243-40ea-96df-373c8a616a16")
-	{}
-} config;
+	slateAdminToken("3acc9bdc-1243-40ea-96df-373c8a616a16"),
+	dataStorePath("data"),
+	options{
+		{"port",portString},
+		{"sslCertificate",sslCertificate},
+		{"sslKey",sslKey},
+		{"slateEndpoint",slateEndpoint},
+		{"slateAdminToken",slateAdminToken},
+		{"dataStorePath",dataStorePath},
+	}
+	{
+		//check for environment variables
+		for(const auto& option : options)
+			fetchFromEnvironment("SLATE_"+option.first,option.second);
+		
+		//interpret command line arguments
+		for(int i=1; i<argc; i++){
+			std::string arg(argv[i]);
+			if(arg.size()<=2 || arg[0]!='-' || arg[1]!='-'){
+				std::cerr << "Unknown argument ignored: '" << arg << '\'' << std::endl;
+				continue;
+			}
+			auto eqPos=arg.find('=');
+			std::string optName=arg.substr(2,eqPos-2);
+			if(options.count(optName)){
+				if(eqPos!=std::string::npos)
+					options.find(optName)->second=arg.substr(eqPos+1);
+				else{
+					if(i==argc-1)
+						throw std::runtime_error("Missing value after "+arg);
+					i++;
+					options.find(arg.substr(2))->second=argv[i];
+				}
+			}
+			else
+				std::cerr << "Unknown argument ignored: '" << arg << '\'' << std::endl;
+		}
+	}
+};
 
 struct UserData{
 	std::string deploymentName;
@@ -231,7 +270,7 @@ void replaceAll(std::string& base, const std::string& target, const std::string&
 		base.replace(pos,target.size(),replacement);
 }
 
-crow::response createAccount(DataStore& store, const crow::request& req, const std::string globusID){
+crow::response createAccount(const Configuration& config, DataStore& store, const crow::request& req, const std::string globusID){
 	auto account=store.find(globusID);
 	
 	if(!account){ //create account if it does not exist
@@ -383,7 +422,7 @@ crow::response serviceDetails(DataStore& store, const crow::request& req, const 
 	return crow::response(to_string(response));
 }
 
-crow::response deleteAccount(DataStore& store, const crow::request& req, const std::string globusID){
+crow::response deleteAccount(const Configuration& config, DataStore& store, const crow::request& req, const std::string globusID){
 	std::cout << "deleting account " << globusID << std::endl;
 	auto account=store.find(globusID);
 	if(!account)
@@ -414,8 +453,9 @@ crow::response deleteAccount(DataStore& store, const crow::request& req, const s
 	return crow::response(200);
 }
 
-int main(){
-	DataStore store("data");
+int main(int argc, char* argv[]){
+	Configuration config(argc, argv);
+	DataStore store(config.dataStorePath);
 	
 	unsigned int port=0;
 	{
@@ -430,9 +470,9 @@ int main(){
 	crow::SimpleApp server;
 	
 	CROW_ROUTE(server, "/account/<string>").methods("PUT"_method)(
-	  [&](const crow::request& req, std::string globusID){ return createAccount(store,req,globusID); });
+	  [&](const crow::request& req, std::string globusID){ return createAccount(config,store,req,globusID); });
 	CROW_ROUTE(server, "/account/<string>").methods("DELETE"_method)(
-	  [&](const crow::request& req, std::string globusID){ return deleteAccount(store,req,globusID); });
+	  [&](const crow::request& req, std::string globusID){ return deleteAccount(config,store,req,globusID); });
 	CROW_ROUTE(server, "/pod_ready/<string>").methods("GET"_method)(
 	  [&](const crow::request& req, std::string globusID){ return podReady(store,req,globusID); });
 	CROW_ROUTE(server, "/service/<string>").methods("GET"_method)(
