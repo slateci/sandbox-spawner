@@ -164,6 +164,7 @@ const static std::string deploymentTemplate=R"(apiVersion: v1
 kind: Secret
 metadata:
   name: {{name}}-slate-data
+  namespace: tutorial
 type: Opaque
 data:
   token: {{slate-token}}
@@ -173,6 +174,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: {{name}}
+  namespace: tutorial
   labels:
     app: {{name}}
 spec:
@@ -280,7 +282,6 @@ crow::response createAccount(DataStore& store, const crow::request& req, const s
 			std::ofstream tmpfile(globusID);
 			tmpfile << deployment;
 		}
-		//auto applyResult=runCommandWithInput("kubectl",deployment,{"apply","-f",""});
 		auto applyResult=runCommand("kubectl",{"apply","-f",globusID});
 		remove(globusID.c_str());
 		if(applyResult.status!=0){
@@ -292,7 +293,7 @@ crow::response createAccount(DataStore& store, const crow::request& req, const s
 		account->secretName=name+"-slate-data";
 		//figure out the name of the pod which was started
 		std::cout << "Locating new pod" << std::endl;
-		auto podResult=runCommand("kubectl",{"get","pods","-l","app="+name,"-o=jsonpath={.items[*].metadata.name}"});
+		auto podResult=runCommand("kubectl",{"get","pods","-l","app="+name,"-n=tutorial","-o=jsonpath={.items[*].metadata.name}"});
 		if(podResult.status!=0){
 			std::cerr << podResult.error << std::endl;
 			return crow::response(500,generateError("Unable to look up kubernetes pod"));
@@ -313,7 +314,7 @@ crow::response podReady(DataStore& store, const crow::request& req, const std::s
 	auto pod=store.find(globusID);
 	if(!pod)
 		return crow::response(404,generateError("User not found"));
-	auto result=runCommand("kubectl",{"get","pod",pod->podName,"-o=json"});
+	auto result=runCommand("kubectl",{"get","pod",pod->podName,"-n=tutorial","-o=json"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl get pod failed: "+result.error));
 	rapidjson::Document data;
@@ -346,7 +347,7 @@ crow::response serviceDetails(DataStore& store, const crow::request& req, const 
 	auto account=store.find(globusID);
 	if(!account)
 		return crow::response(404,generateError("User not found"));
-	auto result=runCommand("kubectl",{"get","service",account->serviceName,"-o=json"});
+	auto result=runCommand("kubectl",{"get","service",account->serviceName,"-n=tutorial","-o=json"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl get service failed: "+result.error));
 	rapidjson::Document data;
@@ -361,7 +362,7 @@ crow::response serviceDetails(DataStore& store, const crow::request& req, const 
 		return crow::response(500,generateError("Unable to parse JSON from kubectl"));
 	std::string port=std::to_string(data["spec"]["ports"][0]["nodePort"].GetInt());
 	
-	result=runCommand("kubectl",{"get","pod",account->podName,"-o=json"});
+	result=runCommand("kubectl",{"get","pod",account->podName,"-n=tutorial","-o=json"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl get pod failed: "+result.error));
 	try{
@@ -395,15 +396,15 @@ crow::response deleteAccount(DataStore& store, const crow::request& req, const s
 		return crow::response(500,generateError("Failed to delete SLATE account"));
 	}
 	//delete the deployment
-	auto result=runCommand("kubectl",{"delete","deployment",account->deploymentName});
+	auto result=runCommand("kubectl",{"delete","deployment",account->deploymentName,"-n=tutorial"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl delete deployment failed: "+result.error));
 	//delete the service
-	result=runCommand("kubectl",{"delete","service",account->serviceName});
+	result=runCommand("kubectl",{"delete","service",account->serviceName,"-n=tutorial"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl delete service failed: "+result.error));
 	//delete the secret
-	result=runCommand("kubectl",{"delete","secret",account->secretName});
+	result=runCommand("kubectl",{"delete","secret",account->secretName,"-n=tutorial"});
 	if(result.status!=0)
 		return crow::response(500,generateError("kubectl delete secret failed: "+result.error));
 	
