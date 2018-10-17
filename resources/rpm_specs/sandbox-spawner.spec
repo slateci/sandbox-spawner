@@ -1,5 +1,5 @@
 Name: sandbox-spawner
-Version: 1.0.0
+Version: 0.1.0
 Release: 1%{?dist}
 Summary: Server for spawning SLATE sandboxes
 License: MIT
@@ -11,7 +11,7 @@ BuildRequires: gcc-c++ boost-devel zlib-devel openssl-devel libcurl-devel cmake3
 Requires: boost zlib openssl libcurl
 
 %description
-SLATE API Server
+SLATE Sandbox Spawner
 
 %prep
 %setup -c -n %{name}-%{version}.tar.gz 
