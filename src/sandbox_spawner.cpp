@@ -40,7 +40,7 @@ struct Configuration{
 	
 	Configuration():
 	portString("18081"),
-	slateEndpoint("http://localhost:18080"),
+	slateEndpoint("http://sandbox.slateci.io:18080"),
 	slateAdminToken("3acc9bdc-1243-40ea-96df-373c8a616a16")
 	{}
 } config;
