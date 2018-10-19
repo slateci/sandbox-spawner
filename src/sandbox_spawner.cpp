@@ -455,7 +455,7 @@ crow::response deleteAccount(const Configuration& config, DataStore& store, cons
 
 int main(int argc, char* argv[]){
 	Configuration config(argc, argv);
-	std::cout << "Configured SLATE endpoint: " << slateEndpoint << std::endl;
+	std::cout << "Configured SLATE endpoint: " << config.slateEndpoint << std::endl;
 	DataStore store(config.dataStorePath);
 	
 	unsigned int port=0;
