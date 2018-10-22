@@ -235,7 +235,7 @@ spec:
         image: slateci/container-ttyd
         command: ["ttyd"]
         args: ["-u","999","-g","999","--ssl","--ssl-cert","/opt/ttyd/cert1.pem","--ssl-key","/opt/ttyd/privkey1.pem","-c","{{auth}}","bash"]
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - containerPort: 7681
           name: ttyd
