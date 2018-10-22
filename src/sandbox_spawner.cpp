@@ -33,6 +33,7 @@
 
 struct Configuration{
 	std::string portString;
+	std::string dnsName;
 	std::string sslCertificate;
 	std::string sslKey;
 	std::string slateEndpoint;
@@ -43,11 +44,13 @@ struct Configuration{
 	
 	Configuration(int argc, char* argv[]):
 	portString("18081"),
+	dnsName("sandbox.slateci.io"),
 	slateEndpoint("http://sandbox.slateci.io:18080"),
 	slateAdminToken("3acc9bdc-1243-40ea-96df-373c8a616a16"),
 	dataStorePath("data"),
 	options{
 		{"port",portString},
+		{"dnsName",dnsName},
 		{"sslCertificate",sslCertificate},
 		{"sslKey",sslKey},
 		{"slateEndpoint",slateEndpoint},
@@ -229,13 +232,16 @@ spec:
       hostname: sandbox
       containers:
       - name: {{name}}
-        image: slateci/container-ttyd
+        image: slateci/container-ttyd-test
         command: ["ttyd"]
-        args: ["-c","{{auth}}","bash"]
-        imagePullPolicy: Always
+        args: ["-u","999","-g","999","--ssl","--ssl-cert","/opt/ttyd/cert1.pem","--ssl-key","/opt/ttyd/privkey1.pem","-c","{{auth}}","bash"]
+        imagePullPolicy: IfNotPresent
         ports:
         - containerPort: 7681
           name: ttyd
+        volumeMounts:
+        - name: server-certificate
+          mountPath: "/opt/ttyd"
         env:
           - name: SLATE_API_ENDPOINT
             valueFrom:
@@ -247,6 +253,11 @@ spec:
               secretKeyRef:
                 name: {{name}}-slate-data
                 key: token
+      volumes:
+      - name: server-certificate
+        secret:
+          secretName: server-certificate
+          defaultMode: 384 # 0600
 ---
 kind: Service
 apiVersion: v1
@@ -278,7 +289,7 @@ crow::response createAccount(const Configuration& config, DataStore& store, cons
 		//make a blank object
 		account=UserData{};
 		//generate an authentication token
-		account->authToken="slate:"+tokenGenerator.getToken();
+		account->authToken=tokenGenerator.getToken();
 		account->servicePort=store.getPort();
 		//create the acount in SLATE
 		std::cout << "Creating SLATE account" << std::endl;
@@ -382,7 +393,7 @@ crow::response podReady(DataStore& store, const crow::request& req, const std::s
 	return crow::response(to_string(response));
 }
 
-crow::response serviceDetails(DataStore& store, const crow::request& req, const std::string globusID){
+crow::response serviceDetails(const Configuration& config, DataStore& store, const crow::request& req, const std::string globusID){
 	std::cout << "getting service endpoint for " << globusID << std::endl;
 	auto account=store.find(globusID);
 	if(!account)
@@ -418,7 +429,8 @@ crow::response serviceDetails(DataStore& store, const crow::request& req, const 
 	
 	rapidjson::Document response(rapidjson::kObjectType);
 	rapidjson::Document::AllocatorType& alloc = response.GetAllocator();
-	response.AddMember("endpoint", externalIP+":"+port, alloc);
+	//!!!: This will only work if config.dnsName maps to externalIP
+	response.AddMember("endpoint", config.dnsName+":"+port, alloc);
 	return crow::response(to_string(response));
 }
 
@@ -477,7 +489,7 @@ int main(int argc, char* argv[]){
 	CROW_ROUTE(server, "/pod_ready/<string>").methods("GET"_method)(
 	  [&](const crow::request& req, std::string globusID){ return podReady(store,req,globusID); });
 	CROW_ROUTE(server, "/service/<string>").methods("GET"_method)(
-	  [&](const crow::request& req, std::string globusID){ return serviceDetails(store,req,globusID); });
+	  [&](const crow::request& req, std::string globusID){ return serviceDetails(config,store,req,globusID); });
 	
 	startReaper();
 	server.loglevel(crow::LogLevel::Warning);
