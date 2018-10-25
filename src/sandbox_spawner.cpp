@@ -428,9 +428,51 @@ crow::response deleteAccount(const Configuration& config, DataStore& store, cons
 	if(!account)
 		return crow::response(404,generateError("User not found"));
 	
+	auto makeURL=[&](std::string path){
+		return config.slateEndpoint+"/v1alpha1/"+path+"?token="+config.slateAdminToken;
+	};
+	
+	//delete anything solely owned by this SLATE account
+	//find VOs to which the user belongs, in case they have no other members
+	auto response=httpRequests::httpGet(makeURL("users/"+account->slateID+"/vos"));
+	if(response.status!=200){
+		std::cerr << "Error: " << response.body << std::endl;
+		return crow::response(500,generateError("Failed to fetch VO memberships"));
+	}
+	rapidjson::Document vosData;
+	try{
+		vosData.Parse(response.body);
+	}catch(std::runtime_error& err){
+		return crow::response(500,generateError("Unable to parse JSON from SLATE API"));
+	}
+	
+	for(const auto& item : vosData["items"].GetArray()){
+		std::string voID=item["metadata"]["id"].GetString();
+		//check who the members of the VO are (or simply how many there are)
+		response=httpRequests::httpGet(makeURL("vos/"+voID+"/members"));
+		if(response.status!=200){
+			std::cerr << "Error: " << response.body << std::endl;
+			return crow::response(500,generateError("Failed to fetch VO members"));
+		}
+		rapidjson::Document voMembers;
+		try{
+			voMembers.Parse(response.body);
+		}catch(std::runtime_error& err){
+			return crow::response(500,generateError("Unable to parse JSON from SLATE API"));
+		}
+		if(voMembers["items"].GetArray().Size()==1){
+			//The VO has only one member, and we know the user to be deleted 
+			//must be that member, so we should delete it. 
+			response=httpRequests::httpDelete(makeURL("vos/"+voID));
+			if(response.status!=200){
+				std::cerr << "Error: " << response.body << std::endl;
+				return crow::response(500,generateError("Failed to delete VO "+voID));
+			}
+		}
+	}
+	
 	//delete the corresponding SLATE account
-	std::string url=config.slateEndpoint+"/v1alpha1/users/"+account->slateID+"?token="+config.slateAdminToken;
-	auto response=httpRequests::httpDelete(url);
+	response=httpRequests::httpDelete(makeURL("users/"+account->slateID));
 	if(response.status!=200){
 		std::cerr << "Error: " << response.body << std::endl;
 		return crow::response(500,generateError("Failed to delete SLATE account"));
