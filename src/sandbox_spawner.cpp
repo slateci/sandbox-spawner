@@ -344,13 +344,28 @@ crow::response createAccount(const Configuration& config, DataStore& store, cons
 		account->secretName=name+"-slate-data";
 		//figure out the name of the pod which was started
 		std::cout << "Locating new pod" << std::endl;
-		auto podResult=runCommand("kubectl",{"get","pods","-l","app="+name,"-n=tutorial","-o=jsonpath={.items[*].metadata.name}"});
-		if(podResult.status!=0){
-			std::cerr << podResult.error << std::endl;
-			return crow::response(500,generateError("Unable to look up kubernetes pod"));
+		while(account->podName.empty()){
+			auto podResult=runCommand("kubectl",{"get","pods","-l","app="+name,"-n=tutorial","-o=json"});
+			if(podResult.status!=0){
+				std::cerr << podResult.error << std::endl;
+				return crow::response(500,generateError("Unable to look up kubernetes pods"));
+			}
+			rapidjson::Document podListing;
+			try{
+				podListing.Parse(podResult.output);
+			}catch(std::runtime_error& err){
+				return crow::response(500,generateError("Unable to parse JSON from pod listing"));
+			}
+			if(!podListing.HasMember("items") || !podListing["items"].IsArray() || !podListing["items"].Size())
+				std::cout << "Found no pods" << std::endl;
+			else
+				for(const auto& pod : podListing["items"].GetArray()){
+					if(!pod["metadata"].HasMember("deletionTimestamp"))
+						account->podName=pod["metadata"]["name"].GetString();
+				}
+			if(account->podName.empty()) //wait a short time before retrying
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
 		}
-		//TODO: deal with possibility of finding more than one pod!
-		account->podName=podResult.output;
 		store.record(globusID,*account);
 	}
 	
