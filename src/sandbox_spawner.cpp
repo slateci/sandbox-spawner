@@ -301,7 +301,7 @@ crow::response createAccount(const Configuration& config, DataStore& store, cons
 		std::cout << "Creating SLATE account" << std::endl;
 		rapidjson::Document request(rapidjson::kObjectType);
 		rapidjson::Document::AllocatorType& alloc = request.GetAllocator();
-		request.AddMember("version", "v1alpha1", alloc);
+		request.AddMember("version", "v1alpha2", alloc);
 		rapidjson::Value metadata(rapidjson::kObjectType);
 		metadata.AddMember("name", globusID, alloc);
 		metadata.AddMember("email", "-", alloc);
@@ -309,7 +309,7 @@ crow::response createAccount(const Configuration& config, DataStore& store, cons
 		metadata.AddMember("admin", false, alloc);
 		request.AddMember("metadata", metadata, alloc);
 		
-		std::string url=config.slateEndpoint+"/v1alpha1/users?token="+config.slateAdminToken;
+		std::string url=config.slateEndpoint+"/v1alpha2/users?token="+config.slateAdminToken;
 		auto response=httpRequests::httpPost(url,to_string(request));
 		if(response.status!=200){
 			std::cerr << "Error: " << response.body << std::endl;
@@ -462,7 +462,7 @@ crow::response deleteAccount(const Configuration& config, DataStore& store, cons
 		return crow::response(404,generateError("User not found"));
 	
 	auto makeURL=[&](std::string path){
-		return config.slateEndpoint+"/v1alpha1/"+path+"?token="+config.slateAdminToken;
+		return config.slateEndpoint+"/v1alpha2/"+path+"?token="+config.slateAdminToken;
 	};
 	
 	//delete anything solely owned by this SLATE account
