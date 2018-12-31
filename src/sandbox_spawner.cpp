@@ -242,6 +242,8 @@ spec:
         volumeMounts:
         - name: server-certificate
           mountPath: "/opt/ttyd"
+        - name: slate-client
+          mountPath: "/usr/local/bin/slate"
         env:
           - name: SLATE_API_ENDPOINT
             valueFrom:
@@ -258,6 +260,10 @@ spec:
         secret:
           secretName: server-certificate
           defaultMode: 384 # 0600
+      - name: slate-client
+        hostPath:
+          path: /opt/sandbox-spawner/slate
+          type: File
 ---
 kind: Service
 apiVersion: v1
