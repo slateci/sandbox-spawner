@@ -301,15 +301,17 @@ crow::response createAccount(const Configuration& config, DataStore& store, cons
 		std::cout << "Creating SLATE account" << std::endl;
 		rapidjson::Document request(rapidjson::kObjectType);
 		rapidjson::Document::AllocatorType& alloc = request.GetAllocator();
-		request.AddMember("version", "v1alpha2", alloc);
+		request.AddMember("version", "v1alpha3", alloc);
 		rapidjson::Value metadata(rapidjson::kObjectType);
 		metadata.AddMember("name", globusID, alloc);
 		metadata.AddMember("email", "-", alloc);
+		metadata.AddMember("phone", "-", alloc);
+		metadata.AddMember("institution", "-", alloc);
 		metadata.AddMember("globusID", globusID, alloc);
 		metadata.AddMember("admin", false, alloc);
 		request.AddMember("metadata", metadata, alloc);
 		
-		std::string url=config.slateEndpoint+"/v1alpha2/users?token="+config.slateAdminToken;
+		std::string url=config.slateEndpoint+"/v1alpha3/users?token="+config.slateAdminToken;
 		auto response=httpRequests::httpPost(url,to_string(request));
 		if(response.status!=200){
 			std::cerr << "Error: " << response.body << std::endl;
@@ -462,44 +464,44 @@ crow::response deleteAccount(const Configuration& config, DataStore& store, cons
 		return crow::response(404,generateError("User not found"));
 	
 	auto makeURL=[&](std::string path){
-		return config.slateEndpoint+"/v1alpha2/"+path+"?token="+config.slateAdminToken;
+		return config.slateEndpoint+"/v1alpha3/"+path+"?token="+config.slateAdminToken;
 	};
 	
 	//delete anything solely owned by this SLATE account
-	//find VOs to which the user belongs, in case they have no other members
-	auto response=httpRequests::httpGet(makeURL("users/"+account->slateID+"/vos"));
+	//find groups to which the user belongs, in case they have no other members
+	auto response=httpRequests::httpGet(makeURL("users/"+account->slateID+"/groups"));
 	if(response.status!=200){
 		std::cerr << "Error: " << response.body << std::endl;
-		return crow::response(500,generateError("Failed to fetch VO memberships"));
+		return crow::response(500,generateError("Failed to fetch group memberships"));
 	}
-	rapidjson::Document vosData;
+	rapidjson::Document groupData;
 	try{
-		vosData.Parse(response.body);
+		groupData.Parse(response.body);
 	}catch(std::runtime_error& err){
 		return crow::response(500,generateError("Unable to parse JSON from SLATE API"));
 	}
 	
-	for(const auto& item : vosData["items"].GetArray()){
-		std::string voID=item["metadata"]["id"].GetString();
-		//check who the members of the VO are (or simply how many there are)
-		response=httpRequests::httpGet(makeURL("vos/"+voID+"/members"));
+	for(const auto& item : groupData["items"].GetArray()){
+		std::string groupID=item["metadata"]["id"].GetString();
+		//check who the members of the group are (or simply how many there are)
+		response=httpRequests::httpGet(makeURL("groups/"+groupID+"/members"));
 		if(response.status!=200){
 			std::cerr << "Error: " << response.body << std::endl;
-			return crow::response(500,generateError("Failed to fetch VO members"));
+			return crow::response(500,generateError("Failed to fetch group members"));
 		}
-		rapidjson::Document voMembers;
+		rapidjson::Document groupMembers;
 		try{
-			voMembers.Parse(response.body);
+			groupMembers.Parse(response.body);
 		}catch(std::runtime_error& err){
 			return crow::response(500,generateError("Unable to parse JSON from SLATE API"));
 		}
-		if(voMembers["items"].GetArray().Size()==1){
-			//The VO has only one member, and we know the user to be deleted 
+		if(groupMembers["items"].GetArray().Size()==1){
+			//The group has only one member, and we know the user to be deleted 
 			//must be that member, so we should delete it. 
-			response=httpRequests::httpDelete(makeURL("vos/"+voID));
+			response=httpRequests::httpDelete(makeURL("groups/"+groupID));
 			if(response.status!=200){
 				std::cerr << "Error: " << response.body << std::endl;
-				return crow::response(500,generateError("Failed to delete VO "+voID));
+				return crow::response(500,generateError("Failed to delete group "+groupID));
 			}
 		}
 	}
