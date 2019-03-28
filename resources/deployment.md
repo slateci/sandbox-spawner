@@ -229,13 +229,15 @@ curl -X DELETE $SPAWNER_URL/account/$GLOBUS_ID
 
 
 
-HTTPS
+HTTPS Renewal
 ======
 ```
 sudo certbot renew
-sudo cp /etc/letsencrypt/live/sandbox.slateci.io/privkey.pem /opt/sandbox-portal/ssl/server.key
-sudo cp /etc/letsencrypt/live/sandbox.slateci.io/cert.pem /opt/sandbox-portal/ssl/server.crt
+sudo cp /etc/letsencrypt/live/`hostname`/privkey.pem /opt/sandbox-portal/ssl/server.key
+sudo cp /etc/letsencrypt/live/`hostname`/cert.pem /opt/sandbox-portal/ssl/server.crt
 
-kubectl create secret generic server-certificate --from-file cert1.pem=/etc/letsencrypt/live/`hostname`/cert.pem --from-file chain1.pem=/etc/letsencrypt/live/`hostname`/chain.pem --from-file fullchain1.pem=/etc/letsencrypt/live/`hostname`/fullchain.pem --from-file privkey1.pem=/etc/letsencrypt/live/`hostname`/privkey.pem -n tutorial
+sudo kubectl --kubeconfig /etc/kubernetes/admin.conf delete secret server-certificate -n tutorial
+sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create secret generic server-certificate --from-file cert1.pem=/etc/letsencrypt/live/`hostname`/cert.pem --from-file chain1.pem=/etc/letsencrypt/live/`hostname`/chain.pem --from-file fullchain1.pem=/etc/letsencrypt/live/`hostname`/fullchain.pem --from-file privkey1.pem=/etc/letsencrypt/live/`hostname`/privkey.pem -n tutorial
+sudo systemctl restart sandbox-portal
 ```
 
