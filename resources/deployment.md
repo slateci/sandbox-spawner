@@ -154,7 +154,7 @@ systemctl start sandbox-spawner
 Portal
 =======
 ```
-yum install nginx certbot certbot-nginx python-virtualenv git
+yum install nginx certbot certbot-nginx python-virtualenv git uwsgi uwsgi-plugin-python2
 systemctl start nginx
 certbot --nginx
 cd /opt
@@ -163,19 +163,107 @@ cd sandbox-portal
 virtualenv venv
 source venv/bin/activate
 pip install -r requirements.txt
-cp /etc/letsencrypt/archive/sandbox.slateci.io/cert1.pem /opt/sandbox-portal/ssl/server.crt
-cp /etc/letsencrypt/archive/sandbox.slateci.io/privkey1.pem /opt/sandbox-portal/ssl/server.key
+
+cat << EOF > /opt/sandbox-portal/sandbox-portal-uwsgi.ini
+[uwsgi]
+socket = :3031
+master = true
+processes = 4
+plugins = python
+venv = /opt/sandbox-portal/venv
+user = centos
+chdir = /opt/sandbox-portal
+module = run_portal
+callable = app
+wsgi_file = /opt/sandbox-portal/run_portal.py
+logto = /tmp/uwsgi.log
+EOF
+```
+
+Edit /etc/nginx/nginx.conf to contain the following (with appropriate hostname substitutions):
+```
+    server {
+        listen       80 default_server;
+        listen       [::]:80 default_server;
+        server_name  _;
+        return 301 https://$host$request_uri;
+    }
+
+    server {
+        listen       443 ssl http2 default_server;
+        listen       [::]:443 ssl http2 default_server;
+        server_name  sandbox.slateci.io;
+        root         /usr/share/nginx/html;
+
+        ssl_certificate "/etc/letsencrypt/live/sandbox.slateci.io/cert.pem";
+        ssl_certificate_key "/etc/letsencrypt/live/sandbox.slateci.io/privkey.pem";
+        ssl_session_cache shared:SSL:1m;
+        ssl_session_timeout  10m;
+        ssl_ciphers HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers on;
+
+        # Load configuration files for the default server block.
+        include /etc/nginx/default.d/*.conf;
+
+        location / {
+            include uwsgi_params;
+            uwsgi_pass 127.0.0.1:3031;
+        }
+
+        error_page 404 /404.html;
+            location = /40x.html {
+        }
+
+        error_page 500 502 503 504 /50x.html;
+            location = /50x.html {
+        }
+    }
+```
+
+```
+cat << EOF > /etc/nginx/uwsgi_params
+uwsgi_param  QUERY_STRING       $query_string;
+uwsgi_param  REQUEST_METHOD     $request_method;
+uwsgi_param  CONTENT_TYPE       $content_type;
+uwsgi_param  CONTENT_LENGTH     $content_length;
+
+uwsgi_param  REQUEST_URI        $request_uri;
+uwsgi_param  PATH_INFO          $document_uri;
+uwsgi_param  DOCUMENT_ROOT      $document_root;
+uwsgi_param  SERVER_PROTOCOL    $server_protocol;
+uwsgi_param  REQUEST_SCHEME     $scheme;
+uwsgi_param  HTTPS              $https if_not_empty;
+
+uwsgi_param  REMOTE_ADDR        $remote_addr;
+uwsgi_param  REMOTE_PORT        $remote_port;
+uwsgi_param  SERVER_PORT        $server_port;
+uwsgi_param  SERVER_NAME        $server_name;
+EOF
+
+cat << EOF > /etc/systemd/system/nginx.service
+[Unit]
+Description=Nginx
+After=syslog.target network.target uwsgi.service
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/sbin/nginx -g "daemon off;"
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+EOF
 
 cat << EOF > /etc/systemd/system/sandbox-portal.service
 [Unit]
-Description=Sandbox Portal
+Description=uWSGI
 After=syslog.target network.target sandbox-spawner.service
 
 [Service]
-User=slate
 Type=simple
-WorkingDirectory=/opt/sandbox-portal
-ExecStart=/opt/sandbox-portal/venv/bin/python /opt/sandbox-portal/run_portal.py
+User=slate
+ExecStart=/usr/sbin/uwsgi --ini /opt/sandbox-portal/sandbox-portal-uwsgi.ini --die-on-term
 Restart=always
 
 [Install]
@@ -184,10 +272,14 @@ EOF
 
 ```
 
+Edit /opt/sandbox-portal/portal/portal.conf to use the correct `SERVER_NAME`, `PORTAL_CLIENT_ID`, and `PORTAL_CLIENT_SECRET`. 
+
 Edit run_portal.py and change `localhost` to your DNS name. Then start:
 
 ```
+systemctl daemon-reload
 systemctl start sandbox-portal
+systemctl restart nginx
 ```
 
 Register cluster with SLATE API Server
@@ -233,8 +325,6 @@ HTTPS Renewal
 ======
 ```
 sudo certbot renew
-sudo cp /etc/letsencrypt/live/`hostname`/privkey.pem /opt/sandbox-portal/ssl/server.key
-sudo cp /etc/letsencrypt/live/`hostname`/cert.pem /opt/sandbox-portal/ssl/server.crt
 
 sudo kubectl --kubeconfig /etc/kubernetes/admin.conf delete secret server-certificate -n tutorial
 sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create secret generic server-certificate --from-file cert1.pem=/etc/letsencrypt/live/`hostname`/cert.pem --from-file chain1.pem=/etc/letsencrypt/live/`hostname`/chain.pem --from-file fullchain1.pem=/etc/letsencrypt/live/`hostname`/fullchain.pem --from-file privkey1.pem=/etc/letsencrypt/live/`hostname`/privkey.pem -n tutorial
