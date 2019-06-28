@@ -72,7 +72,15 @@ systemctl start dynamodb
 SLATE API Server
 ====================
 ```
-yum install http://jenkins.slateci.io/artifacts/static/aws-sdk-cpp-dynamodb-libs-1.5.25-1.el7.centos.x86_64.rpm -y
+cat << EOF > /etc/yum.repos.d/aws-sdk.repo
+[aws-sdk]
+name=AWS SDK for C++
+baseurl=https://jenkins.slateci.io/artifacts/static
+enabled=1
+gpgcheck=0
+repo_gpgcheck=0
+EOF
+
 cat << EOF > /etc/yum.repos.d/slate-server.repo
 [slate-server]
 name=SLATE-server
