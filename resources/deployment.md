@@ -68,6 +68,13 @@ systemctl daemon-reload
 systemctl start dynamodb
 ```
 
+Nginx and TLS Certificate
+========================
+```
+yum install nginx certbot certbot-nginx 
+systemctl start nginx
+certbot --nginx
+```
 
 SLATE API Server
 ====================
@@ -104,6 +111,8 @@ EOF
 
 dd if=/dev/random of=encryption-key bs=1K count=1
 
+cp /etc/letsencrypt/live/`hostname`/fullchain.pem /etc/letsencrypt/live/`hostname`/privkey.pem /opt/slate-api-server/
+
 chown -R slate: /opt/slate-api-server
 
 mkdir /tmp/helm
@@ -121,7 +130,7 @@ After=syslog.target network.target dynamodb.service
 User=slate
 Type=simple
 WorkingDirectory=/opt/slate-api-server
-ExecStart=/usr/bin/slate-service --encryptionKeyFile encryption-key
+ExecStart=/usr/bin/slate-service --encryptionKeyFile encryption-key --sslCertificate /opt/slate-api-server/fullchain.pem --sslKey /opt/slate-api-server/privkey.pem
 Restart=always
 
 [Install]
@@ -148,7 +157,7 @@ Type=simple
 User=slate
 Environment=KUBECONFIG=/etc/kubernetes/admin.conf
 WorkingDirectory=/opt/sandbox-spawner
-ExecStart=/usr/bin/sandbox-spawner
+ExecStart=/usr/bin/sandbox-spawner --slateEndpoint https://`hostname`:18080
 Restart=always
 
 [Install]
@@ -162,9 +171,7 @@ systemctl start sandbox-spawner
 Portal
 =======
 ```
-yum install nginx certbot certbot-nginx python-virtualenv git uwsgi uwsgi-plugin-python2
-systemctl start nginx
-certbot --nginx
+yum install python-virtualenv git uwsgi uwsgi-plugin-python2
 cd /opt
 git clone https://github.com/slateci/sandbox-portal
 cd sandbox-portal
@@ -336,6 +343,9 @@ sudo certbot renew
 
 sudo kubectl --kubeconfig /etc/kubernetes/admin.conf delete secret server-certificate -n tutorial
 sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create secret generic server-certificate --from-file cert1.pem=/etc/letsencrypt/live/`hostname`/cert.pem --from-file chain1.pem=/etc/letsencrypt/live/`hostname`/chain.pem --from-file fullchain1.pem=/etc/letsencrypt/live/`hostname`/fullchain.pem --from-file privkey1.pem=/etc/letsencrypt/live/`hostname`/privkey.pem -n tutorial
+sudo cp /etc/letsencrypt/live/`hostname`/fullchain.pem /etc/letsencrypt/live/`hostname`/privkey.pem /opt/slate-api-server/
+sudo chown slate:slate /opt/slate-api-server/fullchain.pem /opt/slate-api-server/privkey.pem
+sudo systemctl restart slate-api-server
 sudo systemctl restart sandbox-portal
 ```
 
