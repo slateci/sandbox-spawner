@@ -24,6 +24,17 @@ EOF
 setenforce 0
 sed -i 's/^SELINUX=enforcing$/SELINUX=permissive/' /etc/selinux/config
 
+# Disable swap
+swapoff -a
+sed -e '/swap/s/^/#/g' -i /etc/fstab
+
+# Ensure that bridged network traffic goes through iptables
+cat <<EOF >  /etc/sysctl.d/k8s.conf
+net.bridge.bridge-nf-call-ip6tables = 1
+net.bridge.bridge-nf-call-iptables = 1
+EOF
+sysctl --system
+
 yum install -y kubelet kubeadm kubectl --disableexcludes=kubernetes
 
 systemctl enable kubelet && systemctl start kubelet
@@ -65,6 +76,7 @@ EOF
 
 chown -R slate: /opt/dynamodb
 systemctl daemon-reload
+systemctl enable dynamodb
 systemctl start dynamodb
 ```
 
@@ -74,6 +86,12 @@ Nginx and TLS Certificate
 yum install nginx certbot certbot-nginx 
 systemctl start nginx
 certbot --nginx
+
+# Place the certificate where the spawner can use it, inside and outside kubernetes:
+sudo cp /etc/letsencrypt/live/`hostname`/fullchain.pem /etc/letsencrypt/live/`hostname`/privkey.pem /opt/slate-api-server/
+sudo chown slate:slate /opt/slate-api-server/fullchain.pem /opt/slate-api-server/privkey.pem
+kubectl create namespace tutorial
+sudo kubectl --kubeconfig /etc/kubernetes/admin.conf create secret generic server-certificate --from-file cert1.pem=/etc/letsencrypt/live/`hostname`/cert.pem --from-file chain1.pem=/etc/letsencrypt/live/`hostname`/chain.pem --from-file fullchain1.pem=/etc/letsencrypt/live/`hostname`/fullchain.pem --from-file privkey1.pem=/etc/letsencrypt/live/`hostname`/privkey.pem -n tutorial
 ```
 
 SLATE API Server
@@ -117,9 +135,9 @@ chown -R slate: /opt/slate-api-server
 
 mkdir /tmp/helm
 cd /tmp/helm
-curl -O https://storage.googleapis.com/kubernetes-helm/helm-v2.11.0-linux-amd64.tar.gz
-tar -xvzf helm-v2.11.0-linux-amd64.tar.gz
-mv linux-amd64/helm linux-amd64/tiller /usr/local/bin
+curl -LO https://get.helm.sh/helm-v3.2.0-linux-amd64.tar.gz
+tar -xzf helm-v3.2.0-linux-amd64.tar.gz
+mv linux-amd64/helm /usr/local/bin
 
 cat << EOF > /etc/systemd/system/slate-api-server.service
 [Unit]
@@ -138,6 +156,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+systemctl enable slate-api-server
 systemctl start slate-api-server
 ```
 
@@ -147,6 +166,7 @@ Sandbox Spawner
 ```
 yum install http://jenkins.slateci.io/artifacts/sandbox-spawner-0.1.0-1.el7.x86_64.rpm
 mkdir /opt/sandbox-spawner
+chown slate: /opt/sandbox-spawner
 cat << EOF > /etc/systemd/system/sandbox-spawner.service
 [Unit]
 Description=Sandbox Spawner
@@ -165,6 +185,7 @@ WantedBy=multi-user.target
 EOF
 
 systemctl daemon-reload
+systemctl enable sandbox-spawner
 systemctl start sandbox-spawner
 ```
 
@@ -287,12 +308,17 @@ EOF
 
 ```
 
-Edit /opt/sandbox-portal/portal/portal.conf to use the correct `SERVER_NAME`, `PORTAL_CLIENT_ID`, and `PORTAL_CLIENT_SECRET`. 
+Edit /opt/sandbox-portal/portal/portal.conf to use the correct `SERVER_NAME`, 
+`PORTAL_CLIENT_ID`, and `PORTAL_CLIENT_SECRET` to the values obtained from 
+registering the portal with [Globus](https://developers.globus.org/). 
 
-Edit run_portal.py and change `localhost` to your DNS name. Then start:
+Edit run_portal.py to change `host` to your DNS name and correct the paths to the 
+TLS certificate files, typically located in `'/etc/letsencrypt/live/<hostname>/`.
+Then start:
 
 ```
 systemctl daemon-reload
+systemctl enable sandbox-portal
 systemctl start sandbox-portal
 systemctl restart nginx
 ```
@@ -302,7 +328,7 @@ Register cluster with SLATE API Server
 as user `centos`
 ```
 sudo cp /etc/kubernetes/admin.conf .kube/config
-sudo chown centos: ./kube/config
+sudo chown centos: .kube/config
 mkdir ~/.slate
 tail -n1 /opt/slate-api-server/slate_portal_user > ~/.slate/token
 curl -LO http://jenkins.slateci.io/artifacts/client/slate-linux.tar.gz
@@ -311,15 +337,14 @@ rm slate-linux.tar.gz
 sudo cp slate /usr/local/bin/slate
 sudo mv slate /opt/sandbox-spawner/slate
 chmod 0600 .slate/token
-./slate vo create slate
-./slate cluster create --vo slate slate-tutorial
-./slate cluster allow-vo slate-tutorial \*
+slate group create slate --field 'Resource Provider'
+slate cluster create --group slate --org SLATE sandbox
+slate cluster allow-group sandbox \*
 ```
 
 Testing
 =========
 ```
-kubectl create namespace tutorial
 export SPAWNER_URL=localhost:18081
 export GLOBUS_ID=$(uuidgen)
 
