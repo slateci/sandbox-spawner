@@ -323,12 +323,37 @@ systemctl start sandbox-portal
 systemctl restart nginx
 ```
 
-Register cluster with SLATE API Server
+MetalLB
 =====================================
 as user `centos`
 ```
 sudo cp /etc/kubernetes/admin.conf .kube/config
 sudo chown centos: .kube/config
+
+kubectl apply -f https://raw.githubusercontent.com/google/metallb/v0.8.1/manifests/metallb.yaml
+# Get at least one IP address to be used by MetalLB, substitute it below:
+cat <<EOF > metallb-config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: metallb-system
+  name: config
+data:
+  config: |
+    address-pools:
+    - name: default
+      protocol: layer2
+      addresses:
+      - <put address range here>
+EOF
+# If using OpenStack see https://metallb.universe.tf/faq/#is-metallb-working-on-openstack
+```
+
+
+Register cluster with SLATE API Server
+=====================================
+as user `centos`
+```
 mkdir ~/.slate
 tail -n1 /opt/slate-api-server/slate_portal_user > ~/.slate/token
 curl -LO http://jenkins.slateci.io/artifacts/client/slate-linux.tar.gz
