@@ -8,6 +8,6 @@ The sandbox spawner is a web service that runs locally on sandbox.slateci.io and
 * the management of the user data - this is done through the [DataStore](https://github.com/slateci/sandbox-spawner/blob/master/src/sandbox_spawner.cpp#L129) data structure, which is also responsible to serialize/deserialize the data
 * the assignment of the ports - the range is hardcoded in the [getPort](https://github.com/slateci/sandbox-spawner/blob/master/src/sandbox_spawner.cpp#L160) function
 
-# Current monitoring
+# Checkmk monitoring
 
 Check_mk is setup to monitor whether the spawner process is alive, and report if it is not.
